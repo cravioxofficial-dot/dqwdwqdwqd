@@ -397,4 +397,4 @@ app.get(SECRET_PATH, (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Switch Mobility Simulator running on http://localhost:${PORT}`);
-});
+}); 
